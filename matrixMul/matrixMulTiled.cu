@@ -16,12 +16,14 @@
 #include <stdlib.h>
 #include <cuda_runtime.h>
 
+#define TILE_WIDTH 16
+
 void Usage(char* prog_name);
 void common_random_init_matrix(float* matrix, int row, int col);
-__global__ void matrixMulKernel(float* A, float* B, float* C, int M, int K, int N);
+__global__ void matrixMulTiled(float* A, float* B, float* C, int M, int K, int N);
 
 int main(int argc, char* argv[]){
-    if(argc !=r){
+    if(argc !=4){
         Usage(argv[0]);
     }
     int M = strtol(argv[1], NULL, 10);
@@ -40,8 +42,8 @@ int main(int argc, char* argv[]){
     }
 
     //initialize the host matrix
-    common_random_init_matrix<float>(h_A, M, K);
-    common_random_init_matrix<float>(h_B, K, N);
+    common_random_init_matrix(h_A, M, K);
+    common_random_init_matrix(h_B, K, N);
 
     //allocate device memory
     float* d_A, *d_B, *d_C;
@@ -68,8 +70,13 @@ int main(int argc, char* argv[]){
     cudaDeviceSynchronize();
     
     cudaEventRecord(start);
-    matrixMul<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, M, K, N);
+    matrixMulTiled<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, M, K, N);
     cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+
+    float msecTotal = 0.0f;
+    cudaEventElapsedTime(&msecTotal, start, stop);
+    printf("Elapsed time in msec: %f\n", msecTotal);
 
     printf("Copy output data from the CUDA device to the host memory\n");
     cudaMemcpy(h_C, d_C, sizeof(float)*M*N, cudaMemcpyDeviceToHost);
@@ -86,17 +93,15 @@ void matrixMulTiled(float* A, float* B, float* C, int M, int K, int N){
     __shared__ float Bsub[TILE_WIDTH][TILE_WIDTH];
 
     //bx = block의 x좌표, by = block의 y좌표
-    int bx = blockIdx.x;, by = blockIdx.y;
+    int bx = blockIdx.x, by = blockIdx.y;
     //tx = thread의 x좌표, ty = thread의 y좌표
     int tx = threadIdx.x, ty = threadIdx.y;
     
     int row  = by*TILE_WIDTH + ty;
     int col = bx*TILE_WIDTH + tx;
 
-    float p value
 
-    int row = blockIdx.y*blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDIm.x + threadIdx.x;
+
     float pvalue = 0;
     for (int ph = 0; ph<ceil(K/(float)TILE_WIDTH); ++ph){
         if(row<M && ph*TILE_WIDTH+tx<K){
